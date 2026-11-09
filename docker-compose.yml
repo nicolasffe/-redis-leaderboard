@@ -1,0 +1,22 @@
+services:
+  redis:
+    image: redis:7.4
+    container_name: redis-leaderboard
+    ports:
+      - "6379:6379"
+    # AOF: grava cada operação em disco para os dados sobreviverem a reinícios
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_dados:/data
+
+  # Interface gráfica opcional para visualizar as chaves (útil no vídeo)
+  redisinsight:
+    image: redis/redisinsight:2.68
+    container_name: redisinsight
+    ports:
+      - "5540:5540"
+    depends_on:
+      - redis
+
+volumes:
+  redis_dados:
