@@ -48,8 +48,6 @@ As escritas que mexem em mais de uma chave usam **pipeline transacional** (`MULT
 │   └── main.py          # API REST (FastAPI)
 ├── scripts/
 │   └── popular_dados.py # cria jogadores e partidas de exemplo
-├── docs/
-│   └── roteiro-video.md # roteiro do vídeo de apresentação
 ├── docker-compose.yml   # Redis + RedisInsight
 └── requirements.txt
 ```
