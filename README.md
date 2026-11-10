@@ -46,6 +46,8 @@ As escritas que mexem em mais de uma chave usam **pipeline transacional** (`MULT
 │   ├── db.py            # conexão com o Redis
 │   ├── ranking.py       # regras do ranking (todos os comandos Redis ficam aqui)
 │   └── main.py          # API REST (FastAPI)
+├── frontend/
+│   └── index.html       # página do ranking (HTML, CSS e JS puros)
 ├── scripts/
 │   └── popular_dados.py # cria jogadores e partidas de exemplo
 ├── docker-compose.yml   # Redis + RedisInsight
@@ -84,7 +86,8 @@ python -m scripts.popular_dados
 uvicorn app.main:app --reload
 ```
 
-Acesse **http://localhost:8000/docs** para testar todos os endpoints pelo navegador (Swagger).
+- **http://localhost:8000**: página do ranking, que se atualiza sozinha a cada 2 segundos e mostra os comandos Redis executados em cada ação.
+- **http://localhost:8000/docs**: Swagger, para testar todos os endpoints pelo navegador.
 
 ---
 
@@ -161,4 +164,4 @@ Na prática, os dois costumam ser usados **juntos**: o banco relacional como fon
 
 ## Tecnologias
 
-Python 3 · FastAPI · redis-py · Redis 7.4 · Docker Compose · RedisInsight
+Python 3 · FastAPI · redis-py · Redis 7.4 · Docker Compose · RedisInsight · HTML, CSS e JavaScript

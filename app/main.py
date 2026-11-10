@@ -1,19 +1,30 @@
 """API REST do ranking de jogadores.
 
 Executar:  uvicorn app.main:app --reload
+Página do ranking:        http://localhost:8000
 Documentação interativa: http://localhost:8000/docs
 """
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app import ranking
 from app.db import obter_conexao
+
+PAGINA = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
 
 app = FastAPI(
     title="Ranking de Jogadores com Redis",
     description="Leaderboard usando Sorted Sets, Hashes e TTL do Redis.",
 )
 r = obter_conexao()
+
+
+@app.get("/", include_in_schema=False)
+def pagina_inicial():
+    return FileResponse(PAGINA)
 
 
 class NovoJogador(BaseModel):
