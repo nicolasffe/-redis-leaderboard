@@ -46,8 +46,14 @@ As escritas que mexem em mais de uma chave usam **pipeline transacional** (`MULT
 │   ├── db.py            # conexão com o Redis
 │   ├── ranking.py       # regras do ranking (todos os comandos Redis ficam aqui)
 │   └── main.py          # API REST (FastAPI)
-├── frontend/
-│   └── index.html       # página do ranking (HTML, CSS e JS puros)
+├── frontend/            # página do ranking (HTML, CSS e JavaScript puros)
+│   ├── index.html
+│   ├── css/estilos.css
+│   └── js/
+│       ├── app.js       # estado da página, atualização automática e eventos
+│       ├── api.js       # chamadas à API
+│       ├── comandos.js  # comandos Redis exibidos no console da página
+│       └── componentes/ # pódio, classificação, jogador, console, métricas e avisos
 ├── scripts/
 │   └── popular_dados.py # cria jogadores e partidas de exemplo
 ├── docker-compose.yml   # Redis + RedisInsight

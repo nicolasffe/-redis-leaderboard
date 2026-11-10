@@ -117,6 +117,7 @@ def estatisticas(r: redis.Redis) -> dict:
     ttl = r.ttl(CHAVE_SEMANAL)  # -2 = chave não existe, -1 = sem expiração
     return {
         "total_jogadores": r.zcard(CHAVE_GERAL),
+        "jogadores_na_semana": r.zcard(CHAVE_SEMANAL),
         "lider": _formatar(lider)[0] if lider else None,
         "ranking_semanal_expira_em_segundos": ttl if ttl > 0 else None,
     }

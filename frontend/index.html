@@ -1,647 +1,215 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ranking de Jogadores · Redis</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏆</text></svg>">
-<style>
-  :root {
-    --fundo: #0d0f14; --cartao: #151821; --cartao2: #1b1f2a; --borda: #262b38;
-    --texto: #e8eaf0; --suave: #8a90a2;
-    --red: #ff4438; --red-esc: #dc382d; --codigo: #ff8a80;
-    --ouro: #f5c542; --prata: #c3cad5; --bronze: #d38b52;
-    --verde: #3ecf8e; --perigo: #ff6b6b;
-    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
-    color-scheme: dark;
-  }
-  * { box-sizing: border-box; }
-  [hidden] { display: none !important; }
-  body {
-    margin: 0; min-height: 100vh; color: var(--texto);
-    background: radial-gradient(1200px 600px at 10% -10%, #2a1414 0%, transparent 60%), var(--fundo);
-    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  }
-  code { font-family: var(--mono); font-size: 12px; color: var(--codigo); }
-
-  /* Cabeçalho */
-  .topo { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
-          max-width: 1200px; margin: 0 auto; padding: 28px 20px 8px; }
-  .marca { display: flex; gap: 14px; align-items: center; }
-  .logo { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; font-size: 28px;
-          background: linear-gradient(135deg, var(--red), #8b1d17); box-shadow: 0 8px 24px #ff443840; }
-  h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
-  .sub { margin: 2px 0 0; color: var(--suave); }
-  .sub strong { color: var(--red); }
-  .status { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; font-size: 13px;
-            border: 1px solid var(--borda); background: var(--cartao); color: var(--suave); }
-  .ponto { width: 8px; height: 8px; border-radius: 50%; background: var(--suave); }
-  .status.on .ponto { background: var(--verde); animation: pulso 2s infinite; }
-  .status.off .ponto { background: var(--perigo); }
-  .status.off { color: var(--perigo); }
-  @keyframes pulso { 0% { box-shadow: 0 0 0 0 #3ecf8e80; } 70%, 100% { box-shadow: 0 0 0 8px #3ecf8e00; } }
-
-  main { max-width: 1200px; margin: 0 auto; padding: 16px 20px 40px; }
-
-  /* Números do topo */
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 16px; }
-  .stat { background: var(--cartao); border: 1px solid var(--borda); border-radius: 14px; padding: 16px 18px;
-          display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .rotulo { color: var(--suave); font-size: 13px; }
-  .stat strong { font-size: 24px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .stat .valor { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-  .stat code { margin-top: 6px; opacity: .8; }
-  .mini { color: var(--suave); font-size: 13px; white-space: nowrap; }
-
-  /* Layout principal */
-  .grade { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-  .lateral { display: flex; flex-direction: column; gap: 16px; }
-  .cartao { background: var(--cartao); border: 1px solid var(--borda); border-radius: 16px; padding: 18px; }
-  h2 { margin: 0 0 12px; font-size: 16px; }
-  h3 { margin: 16px 0 8px; font-size: 12px; color: var(--suave); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
-
-  /* Abas e filtros */
-  .cartao-topo { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
-  .abas { display: flex; gap: 4px; background: var(--fundo); padding: 4px; border-radius: 10px; border: 1px solid var(--borda); }
-  .aba { background: none; border: 0; color: var(--suave); padding: 7px 14px; border-radius: 7px; font: inherit; font-weight: 600; cursor: pointer; }
-  .aba.ativa { background: var(--cartao2); color: var(--texto); box-shadow: inset 0 0 0 1px var(--borda); }
-  .seletor { color: var(--suave); font-size: 14px; display: flex; gap: 6px; align-items: center; }
-  input, select { background: var(--fundo); border: 1px solid var(--borda); color: var(--texto); border-radius: 9px;
-                  padding: 10px 12px; font: inherit; width: 100%; min-width: 0; }
-  select { width: auto; padding: 6px 8px; }
-  input:focus, select:focus { outline: 2px solid #ff443866; border-color: var(--red); }
-
-  /* Lista do ranking */
-  .lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-  .lista li { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: 12px;
-              padding: 10px 14px; border-radius: 12px; background: var(--cartao2); border: 1px solid transparent;
-              cursor: pointer; transition: border-color .2s, background-color .2s; }
-  .lista li:hover { border-color: var(--borda); background-color: #202533; }
-  .lista li.selecionado { border-color: var(--red); background-color: #2a1a1c; }
-  .lista li.pisca { animation: pisca 1.4s ease-out; }
-  @keyframes pisca { 0% { background-color: #ff443866; border-color: var(--red); } }
-  .pos { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px;
-         background: var(--fundo); color: var(--suave); font-variant-numeric: tabular-nums; }
-  .pos.p1 { background: var(--ouro); color: #3a2a00; }
-  .pos.p2 { background: var(--prata); color: #22262e; }
-  .pos.p3 { background: var(--bronze); color: #2e1a08; }
-  .info { min-width: 0; }
-  .nome { font-weight: 600; display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .nome .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .barra { display: block; height: 4px; border-radius: 4px; background: var(--fundo); margin-top: 6px; overflow: hidden; }
-  .barra::after { content: ""; display: block; height: 100%; width: var(--w); border-radius: 4px;
-                  background: linear-gradient(90deg, var(--red-esc), var(--red)); }
-  .pts { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 16px; white-space: nowrap; }
-  .pts small { color: var(--suave); font-weight: 500; font-size: 12px; margin-left: 3px; }
-  .seta { font-size: 12px; font-weight: 700; padding: 1px 6px; border-radius: 6px; animation: some 4s forwards; white-space: nowrap; }
-  .seta.sobe { color: var(--verde); background: #3ecf8e1f; }
-  .seta.desce { color: var(--perigo); background: #ff6b6b1f; }
-  @keyframes some { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
-  .vazio { color: var(--suave); text-align: center; padding: 24px 0; margin: 0; }
-  .dica { margin: 14px 0 0; color: var(--suave); font-size: 13px; }
-
-  /* Formulários */
-  form { display: flex; flex-direction: column; gap: 10px; }
-  .linha { display: flex; gap: 8px; }
-  .linha input { flex: 1; }
-  .btn { background: linear-gradient(135deg, var(--red), var(--red-esc)); color: #fff; border: 0; border-radius: 9px;
-         padding: 10px 16px; font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
-  .btn:hover { filter: brightness(1.1); }
-  .btn.sec { background: var(--cartao2); border: 1px solid var(--borda); }
-  .btn.perigo { background: none; border: 1px solid #ff6b6b66; color: var(--perigo); width: 100%; margin-top: 16px; }
-  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-  .chip { background: var(--fundo); border: 1px solid var(--borda); color: var(--texto); border-radius: 999px;
-          padding: 5px 12px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
-  .chip:hover { border-color: var(--red); color: var(--red); }
-  .faixa { flex-direction: row; align-items: flex-end; gap: 8px; margin-bottom: 14px; }
-  .faixa label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--suave); flex: 1; }
-
-  /* Detalhe do jogador */
-  .detalhe-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-  .detalhe-topo h2 { margin: 0; font-size: 20px; overflow-wrap: anywhere; }
-  .x { background: none; border: 0; color: var(--suave); font-size: 24px; cursor: pointer; line-height: 1; padding: 0 4px; }
-  .x:hover { color: var(--texto); }
-  .d-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 12px; }
-  .d-grid div { background: var(--cartao2); border-radius: 10px; padding: 10px 12px; }
-  .d-grid span { display: block; color: var(--suave); font-size: 12px; }
-  .d-grid strong { font-size: 18px; font-variant-numeric: tabular-nums; }
-  .viz { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-  .viz li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 10px; border-radius: 8px; font-size: 14px; color: var(--suave); }
-  .viz li.eu { background: #2a1a1c; color: var(--texto); font-weight: 600; }
-
-  /* Log de comandos */
-  .log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-  .log li { border-left: 2px solid var(--red); padding-left: 10px; }
-  .log li.vazio-log { border: 0; padding: 0; color: var(--suave); font-size: 13px; }
-  .log-acao { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; }
-  .log time { color: var(--suave); font-weight: 400; }
-  .log pre { margin: 4px 0 0; font-family: var(--mono); font-size: 12px; color: var(--codigo); white-space: pre-wrap; word-break: break-all; }
-
-  .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
-           background: var(--cartao2); border: 1px solid var(--borda); padding: 12px 18px; border-radius: 12px;
-           box-shadow: 0 12px 32px #0008; transition: .25s; max-width: calc(100% - 32px); }
-  .toast.ver { opacity: 1; transform: translate(-50%, 0); }
-  .toast.erro { border-color: var(--perigo); color: var(--perigo); }
-
-  @media (max-width: 900px) {
-    .grade { grid-template-columns: 1fr; }
-    .stats { grid-template-columns: 1fr; }
-    .topo, main { padding-left: 16px; padding-right: 16px; }
-  }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ranking de Jogadores · Redis</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏆</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+  <link rel="stylesheet" href="/static/css/estilos.css">
+  <script type="module" src="/static/js/app.js"></script>
 </head>
 <body>
-<header class="topo">
-  <div class="marca">
-    <div class="logo">🏆</div>
-    <div>
-      <h1>Ranking de Jogadores</h1>
-      <p class="sub">Leaderboard em tempo real com <strong>Redis</strong> · Sorted Sets, Hashes e TTL</p>
+
+<header class="cabecalho">
+  <div class="container cabecalho-conteudo">
+    <div class="marca">
+      <span class="marca-icone">
+        <svg class="icone" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+      </span>
+      <div>
+        <h1>Ranking de Jogadores</h1>
+        <p>Leaderboard em tempo real com <b>Redis</b></p>
+      </div>
+    </div>
+    <div class="cabecalho-direita">
+      <div class="estruturas" title="Estruturas do Redis usadas no projeto">
+        <span>Sorted Set</span><span>Hash</span><span>TTL</span>
+      </div>
+      <div class="status" id="status">
+        <span class="status-ponto"></span><span id="status-texto">Conectando…</span>
+      </div>
     </div>
   </div>
-  <div class="status" id="status"><span class="ponto"></span><span id="status-texto">Conectando…</span></div>
 </header>
 
-<main>
-  <section class="stats">
-    <div class="stat">
-      <span class="rotulo">Jogadores</span>
-      <strong id="st-total">–</strong>
-      <code>ZCARD ranking:geral</code>
-    </div>
-    <div class="stat">
-      <span class="rotulo">Líder</span>
-      <div class="valor"><strong id="st-lider">–</strong><span id="st-lider-pts" class="mini"></span></div>
-      <code>ZREVRANGE ranking:geral 0 0</code>
-    </div>
-    <div class="stat">
-      <span class="rotulo">Ranking semanal zera em</span>
-      <strong id="st-ttl">–</strong>
-      <code>TTL ranking:semanal</code>
-    </div>
+<main class="container">
+
+  <!-- Números gerais -->
+  <section class="metricas" aria-label="Resumo do ranking">
+    <article class="metrica" style="--tom: #60a5fa">
+      <div class="metrica-topo">
+        <span class="metrica-rotulo">Jogadores</span>
+        <span class="metrica-icone"><svg class="icone" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+      </div>
+      <div class="metrica-valor" id="m-total">—</div>
+      <code class="comando">ZCARD ranking:geral</code>
+    </article>
+
+    <article class="metrica" style="--tom: #f4c64e">
+      <div class="metrica-topo">
+        <span class="metrica-rotulo">Líder</span>
+        <span class="metrica-icone"><svg class="icone" viewBox="0 0 24 24"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg></span>
+      </div>
+      <div class="metrica-valor" id="m-lider">—</div>
+      <code class="comando">ZREVRANGE ranking:geral 0 0</code>
+    </article>
+
+    <article class="metrica" style="--tom: #34d399">
+      <div class="metrica-topo">
+        <span class="metrica-rotulo">Pontuaram nesta semana</span>
+        <span class="metrica-icone"><svg class="icone" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
+      </div>
+      <div class="metrica-valor" id="m-semana">—</div>
+      <code class="comando">ZCARD ranking:semanal</code>
+    </article>
+
+    <article class="metrica" style="--tom: #ff4f45">
+      <div class="metrica-topo">
+        <span class="metrica-rotulo">Ranking semanal zera em</span>
+        <span class="metrica-icone"><svg class="icone" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+      </div>
+      <div class="metrica-valor" id="m-ttl">—</div>
+      <code class="comando">TTL ranking:semanal</code>
+    </article>
   </section>
 
-  <div class="grade">
-    <section class="cartao">
-      <div class="cartao-topo">
-        <div class="abas">
-          <button class="aba ativa" data-aba="geral">Geral</button>
-          <button class="aba" data-aba="semanal">Semanal</button>
-          <button class="aba" data-aba="faixa">Por faixa</button>
-        </div>
-        <label class="seletor" id="seletor-top">Top
-          <select id="top"><option>5</option><option selected>10</option><option>20</option></select>
-        </label>
-      </div>
-      <form id="form-faixa" class="faixa" hidden>
-        <label>De <input type="number" id="faixa-min" value="0" min="0"></label>
-        <label>até <input type="number" id="faixa-max" value="1000" min="0"></label>
-        <button class="btn sec" type="submit">Filtrar</button>
-      </form>
-      <ol id="lista" class="lista"></ol>
-      <p class="vazio" id="vazio" hidden>Nenhum jogador aqui ainda.</p>
-      <p class="dica">Atualiza sozinho a cada 2 s. Experimente um <code>ZINCRBY</code> direto no redis-cli e veja a mudança aqui.</p>
-    </section>
+  <div class="layout">
 
-    <aside class="lateral">
+    <!-- Coluna principal: pódio e classificação -->
+    <div class="coluna">
       <section class="cartao">
-        <h2>Registrar partida</h2>
-        <form id="form-pontos">
-          <input id="pts-nome" list="nomes" placeholder="Nome do jogador" required autocomplete="off">
-          <datalist id="nomes"></datalist>
-          <div class="linha">
-            <input id="pts-valor" type="number" min="1" value="150" required>
-            <button class="btn" type="submit">Somar pontos</button>
-          </div>
-          <div class="chips">
-            <button type="button" class="chip" data-pts="50">+50</button>
-            <button type="button" class="chip" data-pts="100">+100</button>
-            <button type="button" class="chip" data-pts="500">+500</button>
-            <button type="button" class="chip" data-pts="1000">+1000</button>
-          </div>
-        </form>
-      </section>
-
-      <section class="cartao" id="cartao-detalhe" hidden>
-        <div class="detalhe-topo">
+        <header class="cartao-cabecalho">
           <div>
-            <h2 id="d-nome"></h2>
-            <span id="d-pais" class="mini"></span>
+            <h2>Pódio</h2>
+            <p class="cartao-descricao">Os três primeiros do ranking geral</p>
           </div>
-          <button class="x" id="d-fechar" title="Fechar">×</button>
-        </div>
-        <div class="d-grid">
-          <div><span>Posição</span><strong id="d-pos"></strong></div>
-          <div><span>Pontos</span><strong id="d-pts"></strong></div>
-          <div><span>Na semana</span><strong id="d-sem"></strong></div>
-          <div><span>Partidas</span><strong id="d-part"></strong></div>
-        </div>
-        <p class="mini">Cadastrado em <span id="d-criado"></span></p>
-        <h3>Vizinhos no ranking</h3>
-        <ol id="d-viz" class="viz"></ol>
-        <button class="btn perigo" id="d-remover">Remover jogador</button>
+          <code class="comando">ZREVRANGE ranking:geral 0 2 WITHSCORES</code>
+        </header>
+        <div class="podio" id="podio"></div>
       </section>
 
       <section class="cartao">
-        <h2>Novo jogador</h2>
-        <form id="form-jogador">
-          <input id="novo-nome" placeholder="Nome" maxlength="30" required autocomplete="off">
-          <input id="novo-pais" placeholder="País" minlength="2" maxlength="30" required>
-          <button class="btn" type="submit">Cadastrar</button>
+        <header class="cartao-cabecalho">
+          <div>
+            <h2>Classificação</h2>
+            <p class="cartao-descricao" id="descricao-visao"></p>
+          </div>
+          <div class="segmentos" role="tablist" aria-label="Tipo de ranking">
+            <button class="segmento ativo" type="button" data-visao="geral">Geral</button>
+            <button class="segmento" type="button" data-visao="semanal">Semanal</button>
+            <button class="segmento" type="button" data-visao="faixa">Por faixa</button>
+          </div>
+        </header>
+
+        <div class="filtros">
+          <label class="seletor" id="filtro-top">Mostrar
+            <select id="top">
+              <option value="5">Top 5</option>
+              <option value="10" selected>Top 10</option>
+              <option value="20">Top 20</option>
+              <option value="50">Top 50</option>
+            </select>
+          </label>
+          <form class="filtro-faixa" id="form-faixa" hidden>
+            <span>De</span><input type="number" id="faixa-min" value="0" min="0" aria-label="Pontuação mínima">
+            <span>até</span><input type="number" id="faixa-max" value="1000" min="0" aria-label="Pontuação máxima">
+            <span>pts</span>
+            <button class="botao botao-secundario" type="submit">Filtrar</button>
+          </form>
+          <code class="comando" id="comando-visao"></code>
+        </div>
+
+        <div class="tabela-titulos" aria-hidden="true">
+          <span>#</span><span>Jogador</span><span class="col-barra"></span><span>Pontos</span>
+        </div>
+        <ol class="lista" id="lista"></ol>
+        <p class="lista-vazia" id="lista-vazia" hidden>Nenhum jogador aqui ainda.</p>
+
+        <footer class="cartao-rodape">
+          <span class="ao-vivo"></span>
+          Ao vivo: atualiza a cada 2 s. Mude algo pelo redis-cli e veja aparecer aqui.
+        </footer>
+      </section>
+    </div>
+
+    <!-- Coluna lateral: ações, jogador e console -->
+    <aside class="coluna">
+      <section class="cartao cartao-acoes">
+        <div class="segmentos segmentos-cheios" role="tablist" aria-label="Ações">
+          <button class="segmento ativo" type="button" data-acao="partida">
+            <svg class="icone" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            Registrar partida
+          </button>
+          <button class="segmento" type="button" data-acao="jogador">
+            <svg class="icone" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+            Novo jogador
+          </button>
+        </div>
+
+        <form class="formulario" id="form-partida" data-painel="partida">
+          <label class="campo">
+            <span>Jogador</span>
+            <input id="partida-nome" list="sugestoes" placeholder="Escolha ou digite um nome" required autocomplete="off">
+          </label>
+          <datalist id="sugestoes"></datalist>
+          <div class="campo">
+            <span>Pontos da partida</span>
+            <input id="partida-pontos" type="number" min="1" value="150" required>
+            <div class="chips">
+              <button class="chip" type="button" data-pontos="50">+50</button>
+              <button class="chip" type="button" data-pontos="100">+100</button>
+              <button class="chip" type="button" data-pontos="500">+500</button>
+              <button class="chip" type="button" data-pontos="1000">+1000</button>
+            </div>
+            <small class="dica-campo">Os atalhos já somam os pontos com um clique.</small>
+          </div>
+          <button class="botao botao-primario" type="submit">Somar pontos</button>
+        </form>
+
+        <form class="formulario" id="form-jogador" data-painel="jogador" hidden>
+          <label class="campo">
+            <span>Nome</span>
+            <input id="novo-nome" maxlength="30" placeholder="Ex.: ana" required autocomplete="off">
+          </label>
+          <label class="campo">
+            <span>País</span>
+            <input id="novo-pais" list="paises" minlength="2" maxlength="30" placeholder="Ex.: Brasil" required>
+          </label>
+          <datalist id="paises">
+            <option value="Brasil"></option><option value="Argentina"></option><option value="Chile"></option>
+            <option value="Colômbia"></option><option value="Peru"></option><option value="Uruguai"></option>
+            <option value="Portugal"></option><option value="Espanha"></option><option value="México"></option>
+          </datalist>
+          <button class="botao botao-primario" type="submit">Cadastrar jogador</button>
         </form>
       </section>
 
-      <section class="cartao">
-        <h2>Comandos Redis</h2>
-        <ul id="log" class="log">
-          <li class="vazio-log">Cada ação aparece aqui com os comandos executados no Redis.</li>
-        </ul>
+      <section class="cartao cartao-console">
+        <header class="console-cabecalho">
+          <span class="console-luzes" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="console-titulo">
+            <svg class="icone" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            Console Redis
+          </span>
+          <button class="botao-texto" type="button" id="limpar-console">Limpar</button>
+        </header>
+        <div class="console-corpo" id="console"></div>
       </section>
+
+      <section class="cartao cartao-jogador" id="painel-jogador" aria-live="polite"></section>
     </aside>
+
   </div>
 </main>
 
-<div id="toast" class="toast"></div>
+<footer class="container rodape">
+  Python · FastAPI · Redis 7.4
+</footer>
 
-<script>
-const $ = s => document.querySelector(s);
-const fmt = n => Number(n).toLocaleString('pt-BR');
-const enc = encodeURIComponent;
-// Nomes com espaço ou aspas aparecem entre aspas, como no redis-cli
-const q = s => /[\s"']/.test(s) ? JSON.stringify(s) : s;
+<div class="avisos" id="avisos" aria-live="polite"></div>
 
-const estado = {
-  aba: 'geral', top: 10, faixa: { min: 0, max: 1000 },
-  selecionado: null,
-  anteriores: {},   // nome -> {pos, pts} da última renderização (para setas e destaque)
-  mudancas: {},     // nome -> {delta, em} para mostrar ▲/▼
-  chaveRender: '', seq: 0,
-  ttl: null, ttlEm: 0,
-};
-
-async function api(caminho, opcoes = {}) {
-  const resp = await fetch(caminho, { headers: { 'Content-Type': 'application/json' }, ...opcoes });
-  const corpo = await resp.json().catch(() => null);
-  if (!resp.ok) {
-    let msg = corpo && corpo.detail;
-    if (Array.isArray(msg)) msg = msg.map(e => e.msg).join('; ');
-    const erro = new Error(msg || `Erro ${resp.status}`);
-    erro.status = resp.status;
-    throw erro;
-  }
-  return corpo;
-}
-
-let timerToast;
-function toast(msg, erro = false) {
-  const el = $('#toast');
-  el.textContent = msg;
-  el.className = 'toast ver' + (erro ? ' erro' : '');
-  clearTimeout(timerToast);
-  timerToast = setTimeout(() => { el.className = 'toast' + (erro ? ' erro' : ''); }, 2800);
-}
-
-function online(ok) {
-  $('#status').className = 'status ' + (ok ? 'on' : 'off');
-  $('#status-texto').textContent = ok ? 'Redis conectado' : 'API ou Redis fora do ar';
-}
-
-function registrar(acao, comandos) {
-  const log = $('#log');
-  const vazio = log.querySelector('.vazio-log');
-  if (vazio) vazio.remove();
-  const li = document.createElement('li');
-  const topo = document.createElement('div');
-  topo.className = 'log-acao';
-  const titulo = document.createElement('span');
-  titulo.textContent = acao;
-  const hora = document.createElement('time');
-  hora.textContent = new Date().toLocaleTimeString('pt-BR');
-  topo.append(titulo, hora);
-  const pre = document.createElement('pre');
-  pre.textContent = comandos.join('\n');
-  li.append(topo, pre);
-  log.prepend(li);
-  while (log.children.length > 4) log.lastElementChild.remove();
-}
-
-/* ---------- Ranking ---------- */
-
-function comandoRanking() {
-  if (estado.aba === 'faixa') return `ZREVRANGEBYSCORE ranking:geral ${estado.faixa.max} ${estado.faixa.min} WITHSCORES`;
-  const chave = estado.aba === 'semanal' ? 'ranking:semanal' : 'ranking:geral';
-  return `ZREVRANGE ${chave} 0 ${estado.top - 1} WITHSCORES`;
-}
-
-async function atualizarRanking() {
-  const seq = ++estado.seq;
-  try {
-    const [geral, est] = await Promise.all([api('/ranking?top=100'), api('/estatisticas')]);
-    let itens;
-    if (estado.aba === 'geral') {
-      itens = geral.slice(0, estado.top);
-    } else if (estado.aba === 'semanal') {
-      itens = await api(`/ranking/semanal?top=${estado.top}`);
-    } else {
-      const posicoes = Object.fromEntries(geral.map(g => [g.nome, g.posicao]));
-      const lista = await api(`/ranking/faixa?minimo=${estado.faixa.min}&maximo=${estado.faixa.max}`);
-      itens = lista.map(i => ({ ...i, posicao: posicoes[i.nome] ?? null }));
-    }
-    if (seq !== estado.seq) return;  // já existe uma resposta mais nova
-    online(true);
-    renderStats(est);
-    atualizarNomes(geral);
-    renderLista(itens);
-  } catch (e) {
-    if (seq === estado.seq) online(false);
-  }
-}
-
-function renderLista(itens) {
-  const chave = estado.aba + JSON.stringify(itens);
-  if (chave === estado.chaveRender) return;  // nada mudou desde a última vez
-  estado.chaveRender = chave;
-
-  const lista = $('#lista');
-  const antes = {};
-  lista.querySelectorAll('li').forEach(li => { antes[li.dataset.nome] = li.getBoundingClientRect().top; });
-  const tinhaLinhas = lista.children.length > 0;
-
-  const agora = Date.now();
-  const destacar = new Set();
-  for (const it of itens) {
-    const ant = estado.anteriores[it.nome];
-    if (!ant) { if (tinhaLinhas) destacar.add(it.nome); continue; }
-    if (ant.pts !== it.pontos) destacar.add(it.nome);
-    if (ant.pos != null && it.posicao != null && ant.pos !== it.posicao) {
-      estado.mudancas[it.nome] = { delta: ant.pos - it.posicao, em: agora };
-    }
-  }
-  estado.anteriores = Object.fromEntries(itens.map(it => [it.nome, { pos: it.posicao, pts: it.pontos }]));
-
-  const maximo = Math.max(1, ...itens.map(i => i.pontos));
-  lista.replaceChildren(...itens.map(it => {
-    const li = document.createElement('li');
-    li.dataset.nome = it.nome;
-    if (it.nome === estado.selecionado) li.classList.add('selecionado');
-    if (destacar.has(it.nome)) li.classList.add('pisca');
-
-    const pos = document.createElement('span');
-    pos.className = 'pos' + (it.posicao >= 1 && it.posicao <= 3 ? ' p' + it.posicao : '');
-    pos.textContent = it.posicao ?? '–';
-
-    const info = document.createElement('div');
-    info.className = 'info';
-    const nome = document.createElement('div');
-    nome.className = 'nome';
-    const txt = document.createElement('span');
-    txt.className = 'txt';
-    txt.textContent = it.nome;
-    nome.append(txt);
-    const mud = estado.mudancas[it.nome];
-    if (mud && agora - mud.em < 4000) {
-      const seta = document.createElement('span');
-      seta.className = 'seta ' + (mud.delta > 0 ? 'sobe' : 'desce');
-      seta.textContent = (mud.delta > 0 ? '▲ ' : '▼ ') + Math.abs(mud.delta);
-      seta.style.animationDelay = `-${agora - mud.em}ms`;
-      nome.append(seta);
-    }
-    const barra = document.createElement('span');
-    barra.className = 'barra';
-    barra.style.setProperty('--w', (it.pontos / maximo * 100) + '%');
-    info.append(nome, barra);
-
-    const pts = document.createElement('span');
-    pts.className = 'pts';
-    pts.textContent = fmt(it.pontos);
-    const un = document.createElement('small');
-    un.textContent = 'pts';
-    pts.append(un);
-
-    li.append(pos, info, pts);
-    li.addEventListener('click', () => selecionar(it.nome));
-    return li;
-  }));
-
-  // Animação: cada linha desliza da posição antiga para a nova
-  lista.querySelectorAll('li').forEach(li => {
-    const velho = antes[li.dataset.nome];
-    const novo = li.getBoundingClientRect().top;
-    if (velho !== undefined && velho !== novo) {
-      li.animate([{ transform: `translateY(${velho - novo}px)` }, { transform: 'none' }],
-                 { duration: 700, easing: 'cubic-bezier(.2,.8,.2,1)' });
-    } else if (velho === undefined && tinhaLinhas) {
-      li.animate([{ opacity: 0, transform: 'translateX(-12px)' }, { opacity: 1, transform: 'none' }], { duration: 400 });
-    }
-  });
-  $('#vazio').hidden = itens.length > 0;
-}
-
-let chaveNomes = '';
-function atualizarNomes(geral) {
-  const chave = geral.map(g => g.nome).sort().join('|');
-  if (chave === chaveNomes) return;
-  chaveNomes = chave;
-  $('#nomes').replaceChildren(...geral.map(g => Object.assign(document.createElement('option'), { value: g.nome })));
-}
-
-function renderStats(est) {
-  $('#st-total').textContent = fmt(est.total_jogadores);
-  $('#st-lider').textContent = est.lider ? est.lider.nome : '–';
-  $('#st-lider-pts').textContent = est.lider ? fmt(est.lider.pontos) + ' pts' : '';
-  estado.ttl = est.ranking_semanal_expira_em_segundos;
-  estado.ttlEm = Date.now();
-  renderTTL();
-}
-
-function renderTTL() {
-  const el = $('#st-ttl');
-  if (estado.ttl == null) { el.textContent = 'sem pontos na semana'; return; }
-  let s = Math.max(0, Math.round(estado.ttl - (Date.now() - estado.ttlEm) / 1000));
-  const d = Math.floor(s / 86400); s %= 86400;
-  const h = Math.floor(s / 3600); s %= 3600;
-  const m = Math.floor(s / 60); s %= 60;
-  const p = n => String(n).padStart(2, '0');
-  el.textContent = `${d}d ${p(h)}h ${p(m)}m ${p(s)}s`;
-}
-
-function trocarVisao(rotulo) {
-  estado.anteriores = {};
-  estado.mudancas = {};
-  estado.chaveRender = '';
-  $('#lista').replaceChildren();
-  registrar(rotulo, [comandoRanking()]);
-  atualizarRanking();
-}
-
-function rotuloVisao() {
-  if (estado.aba === 'faixa') return `Jogadores entre ${fmt(estado.faixa.min)} e ${fmt(estado.faixa.max)} pts`;
-  return `Top ${estado.top} ${estado.aba === 'semanal' ? 'da semana' : 'geral'}`;
-}
-
-/* ---------- Jogador selecionado ---------- */
-
-function selecionar(nome) {
-  estado.selecionado = nome;
-  $('#pts-nome').value = nome;
-  document.querySelectorAll('#lista li').forEach(li => li.classList.toggle('selecionado', li.dataset.nome === nome));
-  atualizarDetalhe(true);
-}
-
-function fecharDetalhe() {
-  estado.selecionado = null;
-  $('#cartao-detalhe').hidden = true;
-  document.querySelectorAll('#lista li.selecionado').forEach(li => li.classList.remove('selecionado'));
-}
-
-async function atualizarDetalhe(comLog = false) {
-  const nome = estado.selecionado;
-  if (!nome) return;
-  try {
-    const [d, viz] = await Promise.all([
-      api(`/jogadores/${enc(nome)}`),
-      api(`/jogadores/${enc(nome)}/vizinhos?alcance=2`),
-    ]);
-    if (estado.selecionado !== nome) return;
-    $('#cartao-detalhe').hidden = false;
-    $('#d-nome').textContent = d.nome;
-    $('#d-pais').textContent = d.pais;
-    $('#d-pos').textContent = d.posicao ? d.posicao + 'º' : '–';
-    $('#d-pts').textContent = fmt(d.pontos);
-    $('#d-sem').textContent = fmt(d.pontos_semana);
-    $('#d-part').textContent = fmt(d.partidas);
-    $('#d-criado').textContent = new Date(d.criado_em).toLocaleString('pt-BR');
-    $('#d-viz').replaceChildren(...viz.map(v => {
-      const li = document.createElement('li');
-      if (v.nome === nome) li.className = 'eu';
-      const a = document.createElement('span');
-      a.textContent = `${v.posicao}º  ${v.nome}`;
-      const b = document.createElement('span');
-      b.textContent = fmt(v.pontos);
-      li.append(a, b);
-      return li;
-    }));
-    if (comLog) {
-      const p = d.posicao - 1;
-      registrar(`Consultar ${nome}`, [
-        `HGETALL jogador:${q(nome)}`,
-        `ZSCORE ranking:geral ${q(nome)}`,
-        `ZREVRANK ranking:geral ${q(nome)}`,
-        `ZSCORE ranking:semanal ${q(nome)}`,
-        `ZREVRANGE ranking:geral ${Math.max(p - 2, 0)} ${p + 2} WITHSCORES`,
-      ]);
-    }
-  } catch (e) {
-    if (e.status === 404 && estado.selecionado === nome) fecharDetalhe();
-  }
-}
-
-/* ---------- Ações ---------- */
-
-document.querySelectorAll('.aba').forEach(botao => botao.addEventListener('click', () => {
-  if (estado.aba === botao.dataset.aba) return;
-  estado.aba = botao.dataset.aba;
-  document.querySelectorAll('.aba').forEach(b => b.classList.toggle('ativa', b === botao));
-  $('#form-faixa').hidden = estado.aba !== 'faixa';
-  $('#seletor-top').hidden = estado.aba === 'faixa';
-  trocarVisao(rotuloVisao());
-}));
-
-$('#top').addEventListener('change', ev => {
-  estado.top = Number(ev.target.value);
-  trocarVisao(rotuloVisao());
-});
-
-$('#form-faixa').addEventListener('submit', ev => {
-  ev.preventDefault();
-  const min = Number($('#faixa-min').value || 0);
-  const max = Number($('#faixa-max').value || 0);
-  if (min > max) return toast('O mínimo não pode ser maior que o máximo', true);
-  estado.faixa = { min, max };
-  trocarVisao(rotuloVisao());
-});
-
-$('#form-pontos').addEventListener('submit', async ev => {
-  ev.preventDefault();
-  const nome = $('#pts-nome').value.trim();
-  const pontos = parseInt($('#pts-valor').value, 10);
-  if (!nome || !(pontos > 0)) return toast('Informe o jogador e pontos maiores que zero', true);
-  try {
-    const r = await api(`/jogadores/${enc(nome)}/pontos`, { method: 'POST', body: JSON.stringify({ pontos }) });
-    registrar(`+${fmt(pontos)} pontos para ${nome}`, [
-      'MULTI',
-      `ZINCRBY ranking:geral ${pontos} ${q(nome)}`,
-      `ZINCRBY ranking:semanal ${pontos} ${q(nome)}`,
-      `EXPIRE ranking:semanal 604800 NX`,
-      `HINCRBY jogador:${q(nome)} partidas 1`,
-      'EXEC',
-    ]);
-    toast(`${nome} agora tem ${fmt(r.pontos_totais)} pontos`);
-    estado.selecionado = nome;
-    await atualizarRanking();
-    atualizarDetalhe();
-  } catch (e) {
-    toast(e.message, true);
-  }
-});
-
-document.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click', () => {
-  $('#pts-valor').value = chip.dataset.pts;
-  $('#form-pontos').requestSubmit();
-}));
-
-$('#form-jogador').addEventListener('submit', async ev => {
-  ev.preventDefault();
-  const nome = $('#novo-nome').value.trim();
-  const pais = $('#novo-pais').value.trim();
-  try {
-    await api('/jogadores', { method: 'POST', body: JSON.stringify({ nome, pais }) });
-    registrar(`Cadastrar ${nome}`, [
-      `EXISTS jogador:${q(nome)}`,
-      'MULTI',
-      `HSET jogador:${q(nome)} nome ${q(nome)} pais ${q(pais)} criado_em <agora> partidas 0`,
-      `ZADD ranking:geral NX 0 ${q(nome)}`,
-      'EXEC',
-    ]);
-    toast(`${nome} cadastrado! Agora registre uma partida.`);
-    ev.target.reset();
-    $('#pts-nome').value = nome;
-    estado.selecionado = nome;
-    atualizarRanking();
-    atualizarDetalhe();
-  } catch (e) {
-    toast(e.message, true);
-  }
-});
-
-$('#d-fechar').addEventListener('click', fecharDetalhe);
-
-$('#d-remover').addEventListener('click', async () => {
-  const nome = estado.selecionado;
-  if (!nome || !confirm(`Remover ${nome} do ranking?`)) return;
-  try {
-    await api(`/jogadores/${enc(nome)}`, { method: 'DELETE' });
-    registrar(`Remover ${nome}`, [
-      'MULTI',
-      `DEL jogador:${q(nome)}`,
-      `ZREM ranking:geral ${q(nome)}`,
-      `ZREM ranking:semanal ${q(nome)}`,
-      'EXEC',
-    ]);
-    toast(`${nome} removido`);
-    fecharDetalhe();
-    $('#pts-nome').value = '';
-    atualizarRanking();
-  } catch (e) {
-    toast(e.message, true);
-  }
-});
-
-/* ---------- Atualização automática ---------- */
-
-atualizarRanking();
-setInterval(() => { atualizarRanking(); atualizarDetalhe(); }, 2000);
-setInterval(renderTTL, 1000);
-</script>
 </body>
 </html>

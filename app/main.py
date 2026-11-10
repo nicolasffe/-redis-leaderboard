@@ -8,23 +8,25 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app import ranking
 from app.db import obter_conexao
 
-PAGINA = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
+PASTA_FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
 
 app = FastAPI(
     title="Ranking de Jogadores com Redis",
     description="Leaderboard usando Sorted Sets, Hashes e TTL do Redis.",
 )
+app.mount("/static", StaticFiles(directory=PASTA_FRONTEND), name="static")
 r = obter_conexao()
 
 
 @app.get("/", include_in_schema=False)
 def pagina_inicial():
-    return FileResponse(PAGINA)
+    return FileResponse(PASTA_FRONTEND / "index.html")
 
 
 class NovoJogador(BaseModel):
