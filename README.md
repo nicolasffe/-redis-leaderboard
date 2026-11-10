@@ -4,7 +4,7 @@ Implementação de um **leaderboard** (ranking de jogadores) usando o **Redis**,
 
 O projeto foi feito como trabalho individual de um banco NoSQL diferente do adotado no projeto API (MongoDB).
 
-> 🎥 **Vídeo de apresentação:** _[cole aqui o link do vídeo]_
+> 🎥 **Vídeo de apresentação:** [Ranking de jogadores com Redis (Loom)](https://www.loom.com/share/e5d1762e47944df0981f0ad7114e5d06)
 
 ---
 
